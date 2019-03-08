@@ -15,6 +15,8 @@
 #include "Engine/GameEngine.h"
 #include "EngineUtils.h"
 #include "Runtime/Engine/Classes/GameFramework/HUD.h"
+#include "Player/PlayerHud.h"
+#include "UI/BoxHighlightWidget.h"
 
 // Sets default values
 APlayerOverwatch::APlayerOverwatch()
@@ -38,8 +40,6 @@ APlayerOverwatch::APlayerOverwatch()
 	ZoomAlpha = 0.f;
 	bAtZoom = false;
 	bOrbiting = false;
-	isSelecting = false;
-	StartPoint = FVector2D::ZeroVector;
 
 	FollowTarget = nullptr;
 
@@ -83,22 +83,13 @@ void APlayerOverwatch::BeginPlay()
 	PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
 	GetTerrainLocation();
 	GetWorldTimerManager().SetTimer(TerrainTimer, this, &APlayerOverwatch::GetTerrainLocation, 0.15f, true);
-	FInputModeGameAndUI inputMode;
-	inputMode.SetHideCursorDuringCapture(false);
-	PC->SetInputMode(inputMode);
-	PC->bShowMouseCursor = true;
-	PC->bEnableClickEvents = true;
-	PC->bEnableMouseOverEvents = true;
+
 }
 
 // Called to bind functionality to input
 void APlayerOverwatch::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
-
-	PlayerInputComponent->BindAction("Select", IE_Pressed, this, &APlayerOverwatch::SelectStart);
-	PlayerInputComponent->BindAction("Select", IE_Released, this, &APlayerOverwatch::SelectTest);
-	PlayerInputComponent->BindAction("PawnAction", IE_Released, this, &APlayerOverwatch::PawnAction);
 
 	PlayerInputComponent->BindAction("Orbit", IE_Pressed, this, &APlayerOverwatch::OrbitOn);
 	PlayerInputComponent->BindAction("Orbit", IE_Released, this, &APlayerOverwatch::OrbitOff);
@@ -115,7 +106,6 @@ void APlayerOverwatch::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 	PlayerInputComponent->BindAxis("LookUpRate", this, &APlayerOverwatch::LookUpAtRate);
 	PlayerInputComponent->BindAxis("Zoom", this, &APlayerOverwatch::AdjustZoom);
 }
-
 
 void APlayerOverwatch::TurnAtRate(float Rate)
 {
@@ -249,106 +239,4 @@ void APlayerOverwatch::OrbitOn()
 void APlayerOverwatch::OrbitOff()
 {
 	bOrbiting = false;
-}
-
-void APlayerOverwatch::SelectStart()
-{
-	GEngine->AddOnScreenDebugMessage(-1, 15.0f, FColor::Yellow, TEXT("Start Selection"));
-	PC->GetMousePosition(StartPoint.X, StartPoint.Y);
-	isSelecting = true;
-}
-
-void APlayerOverwatch::SelectTest()
-{
-	GEngine->AddOnScreenDebugMessage(-1, 15.0f, FColor::Yellow, TEXT("End Selection"));
-	isSelecting = false;
-	FVector2D EndPoint;
-	PC->GetMousePosition(EndPoint.X, EndPoint.Y);
-
-	bool boxSelecting = false;
-	if ((EndPoint - StartPoint).SizeSquared() > 150.f) boxSelecting = true;
-
-	if (!boxSelecting) SingleSelect();
-	else BoxSelection(EndPoint);
-}
-
-void APlayerOverwatch::SingleSelect()
-{
-	FHitResult hitStuff;
-	TArray< TEnumAsByte < EObjectTypeQuery > > searchObjects;
-	searchObjects.Add(EObjectTypeQuery::ObjectTypeQuery3);//Pawn
-	//searchObjects.Add(EObjectTypeQuery::ObjectTypeQuery7);//JobStuffs??
-	//searchObjects.Add(EObjectTypeQuery::ObjectTypeQuery8);//Buildings??
-
-	PC->GetHitResultUnderCursorForObjects(searchObjects, true, hitStuff);
-
-
-	if (!hitStuff.bBlockingHit)
-	{
-		UnSelectPawns();
-		return;
-	}
-
-
-	ABaseCharacter* AIpawn = Cast<ABaseCharacter>(hitStuff.Actor);
-	if (AIpawn != nullptr && !SelectedCharacters.Contains(AIpawn))
-	{
-		UnSelectPawns();
-		SelectedCharacters.Add(AIpawn);
-		AIpawn->Selected();
-		GEngine->AddOnScreenDebugMessage(-1, 15.0f, FColor::Yellow, hitStuff.Actor->GetName());
-	}
-}
-
-void APlayerOverwatch::BoxSelection(const FVector2D &endPoint)
-{
-	UnSelectPawns();
-	TArray<AActor*> selectedActors;
-	PC->GetHUD()->GetActorsInSelectionRectangle(ABaseCharacter::StaticClass(), StartPoint, endPoint, selectedActors, true, false);
-
-	for (int32 i = 0; i < selectedActors.Num(); ++i)
-	{
-		ABaseCharacter* AIpawn = Cast<ABaseCharacter>(selectedActors[i]);
-		if (AIpawn != nullptr && !SelectedCharacters.Contains(AIpawn))
-		{
-			SelectedCharacters.Add(AIpawn);
-			AIpawn->Selected();
-			//GEngine->AddOnScreenDebugMessage(-1, 15.0f, FColor::Yellow, AIpawn->GetName());
-		}
-	}
-}
-
-void APlayerOverwatch::UnSelectPawns()
-{
-	for (int32 i = 0; i < SelectedCharacters.Num(); ++i)
-	{
-		SelectedCharacters[i]->UnSelected();
-	}
-	SelectedCharacters.Empty(10);
-}
-
-void APlayerOverwatch::PawnAction()
-{
-	if (SelectedCharacters.Num() == 0) return;
-
-	FHitResult hitStuff;
-	TArray< TEnumAsByte < EObjectTypeQuery > > searchObjects;
-	//UCollisionProfile::Get()->ConvertToObjectType(ECC_WorldStatic);
-	searchObjects.Add(UCollisionProfile::Get()->ConvertToObjectType(ECC_WorldStatic));//Pawn
-	//searchObjects.Add(EObjectTypeQuery::ObjectTypeQuery7);//JobStuffs??
-	//searchObjects.Add(EObjectTypeQuery::ObjectTypeQuery8);//Buildings??
-
-	PC->GetHitResultUnderCursorForObjects(searchObjects, true, hitStuff);
-
-	if (!hitStuff.bBlockingHit)
-	{
-		return;
-	}
-
-	GEngine->AddOnScreenDebugMessage(-1, 15.0f, FColor::Yellow, hitStuff.Location.ToString());
-
-	for (int32 i = 0; i < SelectedCharacters.Num(); ++i)
-	{
-		SelectedCharacters[i]->MoveToLocation(hitStuff.Location, -1);
-	}
 }

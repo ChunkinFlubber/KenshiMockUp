@@ -16,6 +16,21 @@ public:
 	ABaseCharacter();
 
 protected:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		class UDecalComponent* SelectionDecal;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		class UMaterialInterface* SelectionDecalMat;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		class UDecalComponent* TargetDecal;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		class UMaterialInterface* TargetDecalMat;
+
+	FNavPathSharedPtr CurrPath;
+	int32 CurrMoveID;
+	class AAIController* AICon;
+	FVector TargetLoc;
+
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 

@@ -22,6 +22,8 @@ class KENBAT_API APlayerOverwatch : public APawn
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = Camera, meta = (AllowPrivateAccess = "true"))
 		class UCameraComponent* PlayerCamera;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, meta = (AllowPrivateAccess = "true"))
+		class APlayerHud* MyHUD;
 
 	struct FTimerHandle TerrainTimer;
 
@@ -31,12 +33,7 @@ class KENBAT_API APlayerOverwatch : public APawn
 
 	bool bOrbiting;
 
-	TArray< class ABaseCharacter*> SelectedCharacters;
-
 	class APlayerController* PC;
-
-	bool isSelecting;
-	FVector2D StartPoint;
 
 public:
 	// Sets default values for this pawn's properties
@@ -127,16 +124,6 @@ protected:
 
 	void OrbitOn();
 	void OrbitOff();
-
-	void SelectStart();
-	void SelectTest();
-
-	void SingleSelect();
-	void BoxSelection(const FVector2D &endPoint);
-
-	void UnSelectPawns();
-
-	void PawnAction();
 
 public:
 	// Called to bind functionality to input
