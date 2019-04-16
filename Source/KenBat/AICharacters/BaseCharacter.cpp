@@ -9,12 +9,20 @@
 #include "Classes/Materials/Material.h"
 #include "EngineUtils.h"
 #include "AITypes.h"
+#include "Containers/Queue.h"
+#include "Engine/GameEngine.h"
+#include "CharacterAttributesComponent.h"
 
 // Sets default values
 ABaseCharacter::ABaseCharacter()
 {
 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
+
+	CurrentLocIndex = 0;
+	isPlayerCharacter = true;
+	CharacterName = "NONE";
+	ShouldLoop = false;
 
 	GetMesh()->SetReceivesDecals(false);
 
@@ -26,6 +34,15 @@ ABaseCharacter::ABaseCharacter()
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 250.0f, 0.0f); // ...at this rotation rate
 	GetCharacterMovement()->JumpZVelocity = 600.f;
 	GetCharacterMovement()->AirControl = 0.2f;
+
+	Attributes = CreateDefaultSubobject<UCharacterAttributesComponent>("Attributes");
+
+	static ConstructorHelpers::FObjectFinder<UBlueprint> NodeVisActor(TEXT("Blueprint'/Game/Blueprints/NodeVisual_BP.NodeVisual_BP'"));
+
+	if (NodeVisActor.Object)
+	{
+		NodeVisualizer = Cast<UClass>(NodeVisActor.Object->GeneratedClass);
+	}
 
 	SelectionDecal = CreateDefaultSubobject<UDecalComponent>("SelectionDecal");
 	SelectionDecal->SetupAttachment(RootComponent);
@@ -66,19 +83,113 @@ void ABaseCharacter::BeginPlay()
 	Super::BeginPlay();
 	GetMesh()->SetRenderCustomDepth(false);
 	AICon = Cast<AAIController>(GetController());
+	TArray<FString> Names = { "Bob","Joe", "Trevor", "Justin", "Jill", "Liana", "Vicky", "Judy", "Melony" };
+	CharacterName = Names[FMath::RandRange(0, Names.Num() - 1)];
+}
+
+bool ABaseCharacter::PathToLocation(const FVector &loc)
+{
+	FAIMoveRequest locMoveRequest;
+	locMoveRequest.SetAcceptanceRadius(0.0f);
+	locMoveRequest.SetGoalLocation(loc);
+	locMoveRequest.SetAllowPartialPath(true);
+	locMoveRequest.SetCanStrafe(true);
+	locMoveRequest.SetProjectGoalLocation(true);
+	locMoveRequest.SetUsePathfinding(true);
+
+	FPathFollowingRequestResult result = AICon->MoveTo(locMoveRequest, &CurrPath);
+
+	if (result.Code != EPathFollowingRequestResult::RequestSuccessful || !CurrPath->IsValid())
+	{
+		ResetPath();
+		return false;
+	}
+
+	CurrMoveID = result.MoveId.GetID();
+	return true;
+}
+
+void ABaseCharacter::DrawPath()
+{
+	TArray<FNavPathPoint> pathPoints = CurrPath->GetPathPoints();
+	if (pathPoints.Num() > 1)
+	{
+		for (int32 i = 0; i < pathPoints.Num(); ++i)
+		{
+			pathPoints[i].Location;
+		}
+		if (TargetLocationsArray.Num() == 1)
+			AddNode(pathPoints[pathPoints.Num() - 1].Location);
+	}
+}
+
+void ABaseCharacter::AddNode(const FVector &loc)
+{
+	if (NodeVisualizer == nullptr) return;
+
+	FRotator Rotation(0.0f, 0.0f, 0.0f);
+	FActorSpawnParameters SpawnInfo;
+	NodeVisActors.Enqueue(GetWorld()->SpawnActor<AActor>(NodeVisualizer, loc, Rotation, SpawnInfo));
+}
+
+void ABaseCharacter::DeleteNodes()
+{
+	AActor* decaly;
+	while (!NodeVisActors.IsEmpty())
+	{
+		NodeVisActors.Dequeue(decaly);
+		decaly->Destroy();
+	}
+}
+
+void ABaseCharacter::ResetPath()
+{
+	TargetLocationsArray.Empty();
+	CurrentLocIndex = 0;
+	DeleteNodes();
+}
+
+void ABaseCharacter::HandleActionChanges()
+{
+
+}
+
+void ABaseCharacter::Move()
+{
+	if (AICon->GetMoveStatus() != EPathFollowingStatus::Idle || TargetLocationsArray.Num() == 0)
+	{
+		return;
+	}
+	if (CurrentLocIndex == TargetLocationsArray.Num() - 1 && ShouldLoop)
+	{
+		CurrentLocIndex = -1;
+	}
+	else if (CurrentLocIndex == TargetLocationsArray.Num() - 1)
+	{
+		ResetPath();
+		return;
+	}
+
+	++CurrentLocIndex;
+	if (!ShouldLoop)
+	{
+		AActor* decaly;
+		NodeVisActors.Dequeue(decaly);
+		decaly->Destroy();
+	}
+
+	if (PathToLocation(TargetLocationsArray[CurrentLocIndex]))
+	{
+		DrawPath();
+	}
 }
 
 // Called every frame
 void ABaseCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	if (TargetDecal->IsVisible())
-	{
-		if (AICon->GetMoveStatus() == EPathFollowingStatus::Idle)
-			TargetDecal->SetVisibility(false);
-		else
-			TargetDecal->SetWorldLocation(TargetLoc);
-	}
+
+	Move();
 }
 
 // Called to bind functionality to input
@@ -92,46 +203,62 @@ void ABaseCharacter::Selected_Implementation()
 {
 	GetMesh()->SetRenderCustomDepth(true);
 	SelectionDecal->SetVisibility(true);
-	if (AICon->GetMoveStatus() != EPathFollowingStatus::Idle)
-		TargetDecal->SetVisibility(true);
 }
 
 void ABaseCharacter::UnSelected_Implementation()
 {
 	GetMesh()->SetRenderCustomDepth(false);
 	SelectionDecal->SetVisibility(false);
-	TargetDecal->SetVisibility(false);
 }
 
-void ABaseCharacter::MoveToLocation(FVector loc, float radious)
+void ABaseCharacter::MoveToAction(const FVector &loc, const float &radious, const bool &addOn)
 {
 	if (AICon == nullptr) return;
 
-	FAIMoveRequest locMoveRequest;
-	locMoveRequest.SetAcceptanceRadius(radious);
-	locMoveRequest.SetGoalLocation(loc);
-	locMoveRequest.SetAllowPartialPath(true);
-	locMoveRequest.SetCanStrafe(true);
-	locMoveRequest.SetProjectGoalLocation(true);
-	locMoveRequest.SetUsePathfinding(true);
+	ShouldLoop = false;
 
-	FPathFollowingRequestResult result = AICon->MoveTo(locMoveRequest, &CurrPath);
-
-	if (result.Code != EPathFollowingRequestResult::RequestSuccessful || !CurrPath->IsValid()) return;
-
-	CurrMoveID = result.MoveId.GetID();
-
-	TArray<FNavPathPoint> pathPoints = CurrPath->GetPathPoints();
-	for (int32 i = 0; i < pathPoints.Num(); ++i)
+	if (addOn)
 	{
-
+		if (!IsLocationCloseToFirst(loc))
+		{
+			TargetLocationsArray.Add(loc);
+			AddNode(loc);
+		}
+		else if (TargetLocationsArray.Num() > 1)
+		{
+			ShouldLoop = true;
+		}
 	}
-	if (pathPoints.Num() > 1)
+	else
 	{
-		TargetLoc = pathPoints[pathPoints.Num() - 1];
-		TargetDecal->SetWorldLocation(TargetLoc);
-		TargetDecal->SetVisibility(true);
+		ResetPath();
+		TargetLocationsArray.Add(loc);
+		DeleteNodes();
 	}
 
-	//AICon->MoveToLocation(loc, radious, true, true, true);
+	if (AICon->GetMoveStatus() != EPathFollowingStatus::Idle && addOn)
+	{
+		return;
+	}
+
+	if (PathToLocation(loc))
+	{
+		DrawPath();
+	}
+
+}
+
+float ABaseCharacter::GetCharacterRadious()
+{
+	return GetCapsuleComponent()->GetUnscaledCapsuleRadius();
+}
+
+bool ABaseCharacter::IsLocationCloseToFirst(const FVector &locToCheck)
+{
+	if (TargetLocationsArray.Num() == 0) return false;
+	if ((TargetLocationsArray[0] - locToCheck).SizeSquared() <= 80.f)
+	{
+		return true;
+	}
+	return false;
 }

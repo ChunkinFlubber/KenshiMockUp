@@ -19,10 +19,11 @@ private:
 	bool isSelecting;
 	FVector2D StartPoint;
 	bool isRenderingBox;
-	bool isRegularMode;
+	bool isAddingMode;
 
 	void AdditionMode();
 	void RegularMode();
+
 	void SelectStart();
 	void UpdateSelect();
 	void SelectTest();
@@ -33,6 +34,7 @@ private:
 	void UnSelectPawns();
 
 	void PawnAction();
+	void MoveAction(const FVector &loc);
 
 	void GetRenderedCharacters(TArray<ABaseCharacter*> &charArray);
 	void CheckCharactersScreenLoc(const TArray<ABaseCharacter*>& charArray, TArray<ABaseCharacter*>& charInBox, FVector2D endPoint);
@@ -40,6 +42,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Widget)
 		TSubclassOf<class UBoxHighlightWidget> BHWidget;
 	class UBoxHighlightWidget* BoxHighlightWidget;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Widget)
+		TSubclassOf<class UScreenNamesWidget> SNWidget;
+	class UScreenNamesWidget* SceenNamesWidget;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Widget)
+		TSubclassOf<class UStatsWidget> CSWidget;
+	class UStatsWidget* CharacterStatsWidget;
 
 	virtual void SetupInputComponent() override;
 	virtual void Tick(float deltaTime) override;

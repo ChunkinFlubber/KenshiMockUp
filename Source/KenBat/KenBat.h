@@ -3,3 +3,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/GameEngine.h"
+
+#define DEBUGMESSAGE(x) if(GEngine){GEngine->AddOnScreenDebugMessage(-1, 15.0f, FColor::Red, x);}
